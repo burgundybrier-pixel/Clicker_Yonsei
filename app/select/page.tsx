@@ -7,6 +7,7 @@ import DepartmentSearch from "@/components/DepartmentSearch";
 import DepartmentCard from "@/components/DepartmentCard";
 import { getDepartments } from "@/lib/departments";
 import { getSelectedDepartmentId, setSelectedDepartmentId } from "@/lib/clientStorage";
+import { searchDepartments } from "@/lib/searchDepartments";
 import type { Department } from "@/types/department";
 
 export default function SelectPage() {
@@ -27,11 +28,8 @@ export default function SelectPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return departments;
-    return departments.filter((d) => d.name.toLowerCase().includes(q));
-  }, [departments, query]);
+  // 약칭(컴공, 전전), 초성(ㅋㅍㅌ), 띄어쓰기 무시까지 처리하는 검색. lib/searchDepartments.ts 참고.
+  const filtered = useMemo(() => searchDepartments(departments, query), [departments, query]);
 
   function handleConfirm() {
     if (selectedId == null) return;
@@ -48,6 +46,11 @@ export default function SelectPage() {
 
         <div className="mt-4">
           <DepartmentSearch value={query} onChange={setQuery} />
+          {!loading && !error && (
+            <p className="mt-2 text-xs text-slate-500">
+              {query.trim() ? `${filtered.length}개 학과 일치` : `총 ${departments.length}개 학과`} · 약칭(컴공, 전전)이나 초성(ㅋㅍㅌ)으로도 검색돼요
+            </p>
+          )}
         </div>
 
         <div className="mt-4 space-y-2 pb-24">

@@ -1,26 +1,8 @@
 "use client";
 
-interface SupportButtonProps {
-  onClick: () => void;
-  disabled?: boolean;
-  label?: string;
-  className?: string;
-}
+import ScoreButton, { type ScoreButtonProps } from "./ScoreButton";
 
-export default function SupportButton({
-  onClick,
-  disabled,
-  label = "응원하기 +1",
-  className = "",
-}: SupportButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`select-none rounded-xl bg-brand-500 px-4 py-2 text-sm font-bold text-white shadow-md shadow-brand-900/30 transition hover:bg-brand-400 active:scale-95 active:animate-pop disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-    >
-      {label}
-    </button>
-  );
+/** 내 학과 응원(+1) 버튼. 실제 구현은 ScoreButton.tsx. */
+export default function SupportButton({ label = "응원하기 +1", ...rest }: ScoreButtonProps) {
+  return <ScoreButton variant="support" label={label} {...rest} />;
 }

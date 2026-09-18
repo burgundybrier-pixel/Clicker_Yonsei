@@ -2,6 +2,7 @@
 
 import type { Department } from "@/types/department";
 import SupportButton from "./SupportButton";
+import { formatScore } from "@/lib/format";
 
 interface MyDepartmentCardProps {
   department: Department;
@@ -28,7 +29,7 @@ export default function MyDepartmentCard({
             현재 {rank}위 / {totalDepartments}개 학과 중
           </p>
         </div>
-        <p className="shrink-0 text-4xl font-extrabold tabular-nums text-white">{department.score}</p>
+        <p className="shrink-0 text-4xl font-extrabold tabular-nums text-white">{formatScore(department.score)}</p>
       </div>
       <div className="mt-4">
         <SupportButton

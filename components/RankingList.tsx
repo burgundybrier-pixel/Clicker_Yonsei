@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { Department } from "@/types/department";
+import { formatScore } from "@/lib/format";
 
 interface RankingListProps {
   /** score DESC로 이미 정렬된 배열을 받는다. */
@@ -34,8 +35,8 @@ export default function RankingList({ departments, myDepartmentId, renderAction 
               </span>
             </div>
             <div className="flex shrink-0 items-center gap-3">
-              <span className="w-12 text-right text-sm font-bold tabular-nums text-white">
-                {department.score}
+              <span className="min-w-[3rem] text-right text-sm font-bold tabular-nums text-white">
+                {formatScore(department.score)}
               </span>
               {renderAction?.(department, rank)}
             </div>

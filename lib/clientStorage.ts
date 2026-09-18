@@ -24,6 +24,10 @@ export function setSelectedDepartmentId(id: number): void {
   window.localStorage.setItem(SELECTED_DEPARTMENT_KEY, String(id));
 }
 
+export function clearSelectedDepartmentId(): void {
+  window.localStorage.removeItem(SELECTED_DEPARTMENT_KEY);
+}
+
 export function getClickStats(): ClickStats {
   if (typeof window === "undefined") return EMPTY_STATS;
   const raw = window.localStorage.getItem(STATS_KEY);

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Header from "@/components/Header";
 import { getRanking } from "@/lib/scores";
+import { formatScore } from "@/lib/format";
 
 // 방문할 때마다 최신 참여 학과 수/1위/누적 점수를 보여주기 위해 캐시하지 않는다.
 export const dynamic = "force-dynamic";
@@ -41,7 +42,7 @@ export default async function LandingPage() {
           </div>
           <div className="rounded-xl border border-white/10 bg-white/5 p-4">
             <dt className="text-xs text-slate-400">누적 점수</dt>
-            <dd className="mt-1 text-xl font-bold text-white">{totalScore}</dd>
+            <dd className="mt-1 text-xl font-bold text-white">{formatScore(totalScore)}</dd>
           </div>
         </dl>
 

@@ -1,107 +1,75 @@
-# [Cursor 프롬프트] B — 데이터 및 서버(Backend) 담당
+# [작업 지시서] B — Supabase 연결 · 동시성 검증 · Vercel 배포
 
-아래 내용을 그대로 Cursor Chat / Composer에 붙여넣어서 시작하세요.
-작업 브랜치: `feature/backend` (main에서 분기, 없으면 새로 만드세요)
+아래 내용을 Cursor Chat / Claude 에 붙여넣고 시작하세요. 작업 브랜치: `feature/supabase` (main 에서 분기)
 
 ---
 
-당신은 "학과 대항전 클릭 배틀"이라는 실시간 웹서비스의 백엔드/데이터 담당 개발자입니다. 저는 3인 팀 중 "데이터 및 서버(B)" 담당이고, 당신은 저를 도와 아래 명세대로 코드를 작성합니다.
+당신은 "학과 대항전 클릭 배틀" 웹서비스(Next.js 14 App Router + TypeScript + Supabase) 의 데이터·배포 담당을 돕는 개발자입니다. 저는 팀의 B 담당이고, 이 프로젝트는 처음 봅니다. 코드를 바꾸기 전에 반드시 저에게 무엇을 왜 바꾸는지 설명해 주세요.
 
-## 서비스 개요
+## 프로젝트 현재 상태 (중요)
 
-사용자가 자신의 학과를 선택하고, 배틀 화면에서 "내 학과"를 클릭하면 +1점, "다른 학과"를 클릭하면 그 학과가 -1점 되는 서비스입니다. 회원가입 없음. 기술 스택: Next.js(App Router) + TypeScript + Tailwind CSS + Supabase, 배포는 Vercel.
+- 기능 코드는 **이미 전부 구현되어 있습니다.** 화면, API 라우트, DB 스키마 SQL, 레이트리밋, 낙관적 업데이트, 폴링 모두 완료.
+- 앱은 `.env.local` 에 진짜 Supabase 키가 없으면 자동으로 **개발 모드**(서버 메모리 DB, `lib/devStore.ts`)로 돌아갑니다. 판단 로직은 `lib/supabase.ts` 의 `isSupabaseConfigured`.
+- **제 임무는 코드를 새로 짜는 게 아니라, 실제 Supabase 프로젝트를 만들어 연결하고, 동시성이 정상인지 검증하고, Vercel 에 배포하는 것입니다.**
+- 단계별 절차는 `docs/SUPABASE_SETUP.md` 에 있습니다. 이 문서를 먼저 읽고 그 순서대로 저를 안내해 주세요.
+- 구조 설명은 `docs/ARCHITECTURE.md` 에 있습니다. 특히 1절(큰 그림), 3절(클릭 흐름), 5절(DB) 을 참고하세요.
 
-## 내가 담당하는 부분 (당신이 만들 것)
+## 제가 담당하는 파일 (필요하면 수정 가능)
 
-- Supabase 프로젝트의 `departments` 테이블 스키마 및 마이그레이션 SQL
-- `lib/supabase.ts` — Supabase 클라이언트 초기화
-- `lib/departments.ts` — `getDepartments()`
-- `lib/scores.ts` — `getRanking()`, `supportDepartment(id)`, `attackDepartment(id)` (점수 증가/감소, 원자적 처리)
-- 랭킹 조회 로직
-- 동시 클릭에도 안전한 원자적 점수 갱신 (race condition 방지)
-- 요청 빈도 제한(rate limiting) — 한 브라우저/클라이언트 기준 초당 최대 5회
+- `supabase/migrations/*.sql` — 스키마·함수·RLS·시드
+- `lib/supabase.ts` — 연결 판단, anon 클라이언트
+- `lib/server/supabaseAdmin.ts` — service_role 클라이언트 (서버 전용)
+- `lib/server/scoreRoute.ts` — /api/support, /api/attack 공통 처리
+- `lib/server/rateLimit.ts` — 요청 제한
+- `lib/departments.ts`, `lib/scores.ts` — 조회/변경 함수 (시그니처는 바꾸지 않음)
+- `app/api/**/route.ts`
+- `.env.local.example`, `docs/SUPABASE_SETUP.md`
 
-**다른 사람이 담당하는 파일은 절대 수정하지 마세요**: `app/battle/*`, `app/page.tsx`, `app/select/*`, `components/*` 전체(UI 컴포넌트). A와 C가 당신이 만든 `lib/departments.ts`, `lib/scores.ts`의 함수를 **import해서 호출**할 것이므로, 함수 시그니처를 반드시 아래와 똑같이 유지하세요.
+**건드리지 않는 파일**: `app/*/page.tsx`, `components/*`, `lib/clientStorage.ts`, `lib/searchDepartments.ts`, `lib/hooks/*`. 문제를 발견하면 고치지 말고 PR 설명에 적어 주세요.
 
-## 공통 계약 (반드시 그대로 사용, 이름/시그니처 변경 금지)
+## 공통 계약 (변경 금지)
 
 ```ts
-// types/department.ts
-interface Department {
-  id: number
-  name: string
-  score: number
-}
-
-// lib/departments.ts
-export async function getDepartments(): Promise<Department[]>
-
-// lib/scores.ts
-export async function getRanking(): Promise<Department[]>            // score DESC 정렬
-export async function supportDepartment(id: number): Promise<Department>  // score = score + 1, 갱신된 학과 반환
-export async function attackDepartment(id: number): Promise<Department>   // score = max(score - 1, 0), 갱신된 학과 반환
+interface Department { id: number; name: string; score: number }   // types/department.ts
+getDepartments(): Promise<Department[]>
+getRanking(): Promise<Department[]>
+supportDepartment(id: number): Promise<Department>
+attackDepartment(id: number): Promise<Department>
 ```
+- `service_role` 키에는 절대 `NEXT_PUBLIC_` 접두사를 붙이지 않는다.
+- `lib/server/` 의 파일은 브라우저 코드(`"use client"`, `components/`)에서 import 하지 않는다.
+- 학과 목록을 바꾸면 `lib/departmentNames.ts` 와 SQL 시드를 함께 바꾼다.
 
-- `getDepartments()`와 `getRanking()`은 결과가 다를 수 있음에 주의: `getDepartments()`는 전체 목록(학과 선택 화면용, 이름순 정렬 권장), `getRanking()`은 점수 내림차순 정렬(배틀/랭킹 화면용). 필요하면 내부적으로 같은 쿼리를 재사용해도 됩니다.
+## 해야 할 일 (순서대로)
 
-## 데이터베이스 스키마 (Supabase / PostgreSQL)
+### 1. Supabase 연결
+`docs/SUPABASE_SETUP.md` 1~4절. 프로젝트 생성 → `init.sql` 실행 → `.env.local` 에 키 3개 → 서버 재시작 → 체크리스트 확인.
+확인 포인트: 클릭 후 **Supabase Table Editor 에서 점수가 실제로 바뀌는가.**
 
-```sql
-create table departments (
-  id bigint generated always as identity primary key,
-  name text not null unique,
-  score bigint not null default 0 check (score >= 0),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-```
+### 2. 동시성 검증
+브라우저 콘솔에서 `/api/support` 를 20개 동시에 보내 DB 점수가 정확히 20 오르는지 확인 (가이드 4절의 스크립트). 누락(19 이하)이나 덮어쓰기가 있으면 `attack_department`/`support_department` 함수가 단일 UPDATE 문인지, 애플리케이션 코드에서 "읽고-계산-쓰기" 를 하고 있지 않은지 점검.
 
-초기 데이터(연세대 주요 학과 예시로 십수 개 정도 seed) 를 INSERT 문으로 함께 작성해주세요.
+### 3. 레이트리밋 확인
+같은 스크립트를 40개로 보내면 일부가 429 로 거절되는지 확인. 정상 플레이(사람 클릭)에서는 절대 429 가 나면 안 됩니다. 필요하면 `lib/server/rateLimit.ts` 의 `MAX_REQUESTS_PER_WINDOW` 조정.
 
-## 점수 증가/감소 — 반드시 원자적(atomic) 처리
+### 4. Vercel 배포
+가이드 5절. 환경변수 3개를 Vercel 에 입력하고 배포. 배포 주소에서 1~2 를 다시 확인.
 
-클라이언트는 절대 "몇 점 변화시킬지"를 결정하지 못합니다. **변화량(+1/-1)은 항상 서버(DB 함수)가 직접 정합니다.** 동시에 여러 사용자가 같은 학과를 클릭해도 두 요청이 모두 반영되어야 합니다 (예: 100점에서 A가 attack, B가 attack 동시에 오면 반드시 98점이 되어야 함. 96점처럼 하나가 누락되거나 99점처럼 덮어써지면 안 됨).
-
-권장 구현: Supabase Postgres에 SQL 함수(RPC)를 만들어 단일 UPDATE 문으로 원자적 증감을 수행하세요.
-
-```sql
-create or replace function support_department(dept_id bigint)
-returns departments as $$
-  update departments
-  set score = score + 1, updated_at = now()
-  where id = dept_id
-  returning *;
-$$ language sql volatile;
-
-create or replace function attack_department(dept_id bigint)
-returns departments as $$
-  update departments
-  set score = greatest(score - 1, 0), updated_at = now()
-  where id = dept_id
-  returning *;
-$$ language sql volatile;
-```
-
-그리고 `lib/scores.ts`에서 `supabase.rpc('support_department', { dept_id: id })` / `supabase.rpc('attack_department', { dept_id: id })`로 호출하세요. (단일 UPDATE 문은 Postgres에서 row-level lock으로 원자적이므로 애플리케이션 레벨 락이 필요 없습니다. `score = score + 1`처럼 "읽고 - 계산 - 쓰기"를 애플리케이션 코드에서 따로 하지 말고, 반드시 DB의 단일 SQL 문 안에서 계산하세요.)
-
-## 요청 빈도 제한 (Rate Limiting)
-
-- 규칙: 한 클라이언트(브라우저) 기준 초당 최대 5회 요청까지만 점수에 반영, 초과분은 무시(점수 반영 안 함, 에러 또는 조용한 무시 응답)
-- API 라우트(`app/api/support/route.ts`, `app/api/attack/route.ts` 등, 또는 선택한 방식)에서 클라이언트를 식별할 수단이 필요합니다. 로그인이 없으므로 쿠키에 저장하는 임의의 클라이언트 ID(uuid)를 발급하거나, 없다면 IP 기반으로 최소한의 제한을 구현하세요. 메모리 기반의 간단한 토큰 버킷/슬라이딩 윈도우면 충분합니다(MVP 수준).
-- Next.js Server Action 또는 Route Handler 중 편한 방식으로 구현하되, **클라이언트에서 서버로 가는 모든 점수 변경 요청은 이 레이어를 반드시 거치도록** 하세요. A, C가 호출하는 `lib/scores.ts`의 함수가 내부적으로 이 API를 호출하는 구조로 만들면 됩니다.
+### 5. (선택, 시간 남으면) 개선
+- 레이트리밋을 Upstash Redis 로 교체 (서버리스 다중 인스턴스 대응)
+- `lib/hooks/useRankingPolling.ts` 를 Supabase Realtime 으로 교체 — 단, 이건 A/C 담당 파일과 겹치므로 먼저 팀에 이야기
+- 누적 클릭 수를 정확히 세는 `total_clicks` 카운터 컬럼 추가 (현재 랜딩의 "누적 점수" 는 점수 합계 근사)
 
 ## 완성 기준 (Definition of Done)
 
-- [ ] `departments` 테이블이 실제로 생성되고 seed 데이터가 있음
-- [ ] `getDepartments()`, `getRanking()`이 실제 DB에서 데이터를 가져옴
-- [ ] `supportDepartment(id)` 호출 시 실제로 DB 점수가 +1 됨
-- [ ] `attackDepartment(id)` 호출 시 실제로 DB 점수가 -1 되고 0 밑으로 내려가지 않음
-- [ ] 동시에 여러 요청이 와도 (부하 테스트 스크립트나 Promise.all로 동시 10개 요청 시뮬레이션) 점수가 정확히 반영됨 (누락/덮어쓰기 없음)
-- [ ] 초당 5회를 초과하는 요청은 점수에 반영되지 않음
-- [ ] 랭킹 조회가 항상 점수 내림차순으로 반환됨
+- [ ] Supabase 프로젝트에 `departments` 테이블과 학과 66개가 있다
+- [ ] `.env.local` 에 진짜 키 3개가 있고, 터미널에 `[dev fallback]` 경고가 없다
+- [ ] 클릭 시 DB 점수가 실제로 바뀐다 (Table Editor 로 확인)
+- [ ] 동시 20건 요청 → 정확히 +20
+- [ ] 초당 30회 초과 시 429, 정상 클릭은 429 없음
+- [ ] 두 브라우저 탭에서 서로의 클릭이 3초 내 반영
+- [ ] Vercel 주소에서 위 항목 재확인
+- [ ] `docs/SUPABASE_SETUP.md` 에서 실제와 다른 부분을 발견했으면 고쳐서 함께 커밋
+- [ ] `.env.local` 이 커밋에 포함되지 않았다 (`git status` 확인)
 
-## 환경 변수
-
-`.env.local`에 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`(및 필요 시 서버 전용 `SUPABASE_SERVICE_ROLE_KEY`)를 사용한다고 가정하고 `lib/supabase.ts`를 작성하세요. 실제 키 값은 제가 별도로 채워 넣겠습니다. `.env.local.example` 파일도 만들어주세요.
-
-작업은 `feature/backend` 브랜치에서 진행하고, 완성되면 커밋해주세요.
+`feature/supabase` 브랜치에서 작업하고 PR 을 올려 주세요. PR 설명에 Vercel 주소를 적어 주세요.
