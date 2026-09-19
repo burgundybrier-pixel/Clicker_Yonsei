@@ -10,6 +10,7 @@ interface MyDepartmentCardProps {
   totalDepartments: number;
   onSupport: () => void;
   disabled?: boolean;
+  pointsToOvertake?: number;
 }
 
 export default function MyDepartmentCard({
@@ -18,6 +19,7 @@ export default function MyDepartmentCard({
   totalDepartments,
   onSupport,
   disabled,
+  pointsToOvertake,
 }: MyDepartmentCardProps) {
   return (
     <div className="rounded-2xl border border-brand-400/40 bg-gradient-to-br from-brand-500/20 to-brand-900/20 p-5 shadow-lg shadow-brand-900/20">
@@ -31,6 +33,11 @@ export default function MyDepartmentCard({
         </div>
         <p className="shrink-0 text-4xl font-extrabold tabular-nums text-white">{formatScore(department.score)}</p>
       </div>
+      <p className={`mt-3 text-sm font-semibold tabular-nums ${pointsToOvertake != null && pointsToOvertake <= 5 ? "battle-near-overtake text-orange-300" : "text-brand-300"}`}>
+        {rank === 1 ? "현재 1위 👑" : pointsToOvertake != null
+          ? pointsToOvertake <= 5 ? `🔥 역전까지 ${pointsToOvertake}점!` : `${rank - 1}위 역전까지 ${pointsToOvertake}점`
+          : null}
+      </p>
       <div className="mt-4">
         <SupportButton
           onClick={onSupport}

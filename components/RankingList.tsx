@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { Department } from "@/types/department";
 import { formatScore } from "@/lib/format";
 
@@ -14,8 +14,40 @@ interface RankingListProps {
 }
 
 export default function RankingList({ departments, myDepartmentId, renderAction }: RankingListProps) {
+  const rows = useRef(new Map<number, HTMLLIElement>());
+  const positions = useRef(new Map<number, number>());
+  const animations = useRef(new Map<number, Animation>());
+
+  useLayoutEffect(() => {
+    const nextPositions = new Map<number, number>();
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    rows.current.forEach((row, id) => {
+      const top = row.offsetTop;
+      nextPositions.set(id, top);
+      const previous = positions.current.get(id);
+      if (previous != null && previous !== top) {
+        animations.current.get(id)?.cancel();
+        if (!reduceMotion) {
+          animations.current.set(id, row.animate(
+            [{ transform: `translateY(${previous - top}px)` }, { transform: "translateY(0)" }],
+            { duration: 240, easing: "ease-out" }
+          ));
+        }
+      }
+    });
+    positions.current = nextPositions;
+  }, [departments]);
+
+  useLayoutEffect(() => {
+    const activeAnimations = animations.current;
+    return () => {
+      activeAnimations.forEach((animation) => animation.cancel());
+      activeAnimations.clear();
+    };
+  }, []);
+
   return (
-    <ol className="space-y-2">
+    <ol className="relative space-y-2">
       {departments.map((department, index) => {
         const rank = index + 1;
         const isMine = department.id === myDepartmentId;
@@ -23,6 +55,10 @@ export default function RankingList({ departments, myDepartmentId, renderAction 
         return (
           <li
             key={department.id}
+            ref={(element) => {
+              if (element) rows.current.set(department.id, element);
+              else rows.current.delete(department.id);
+            }}
             className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
               isMine ? "border-brand-400/50 bg-brand-500/10" : "border-white/10 bg-white/5"
             }`}

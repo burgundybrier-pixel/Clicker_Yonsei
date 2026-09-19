@@ -21,6 +21,8 @@ import type { Department } from "@/types/department";
  */
 export function useRankingPolling(intervalMs: number) {
   const [departments, setDepartments] = useState<Department[]>([]);
+  // UI celebrations compare server snapshots, never speculative scores.
+  const [confirmedDepartments, setConfirmedDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +35,7 @@ export function useRankingPolling(intervalMs: number) {
     try {
       const fresh = await getRanking();
       setDepartments(fresh);
+      setConfirmedDepartments(fresh);
       setError(null);
     } catch (err) {
       // 첫 로드가 아니면(이미 목록이 있으면) 폴링 실패는 조용히 무시하고 다음 주기에 다시 시도한다.
@@ -63,5 +66,5 @@ export function useRankingPolling(intervalMs: number) {
     };
   }, [intervalMs, resync]);
 
-  return { departments, setDepartments, resync, loading, error };
+  return { departments, setDepartments, confirmedDepartments, setConfirmedDepartments, resync, loading, error };
 }

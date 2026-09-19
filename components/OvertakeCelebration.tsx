@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 export interface OvertakeEvent {
   id: number;
   names: string[];
+  departmentName: string;
 }
 
 export default function OvertakeCelebration({ event }: { event: OvertakeEvent | null }) {
@@ -27,10 +28,8 @@ export default function OvertakeCelebration({ event }: { event: OvertakeEvent | 
             ))}
           </div>
           <div className="overtake-message">
-            <span className="text-3xl" aria-hidden="true">🔥</span>
-            <p className="mt-2 text-xs font-bold tracking-widest text-orange-300">역전 성공!</p>
-            <p className="mt-2 break-keep text-lg font-extrabold text-white">
-              <span className="text-amber-200">{event.names.join(", ")}</span>를 역전했습니다
+            <p className="break-words text-sm font-bold text-white">
+              🔥 {event.departmentName}가 <span className="text-amber-200">{event.names.join(", ")}</span>를 추월했습니다!
             </p>
           </div>
         </div>

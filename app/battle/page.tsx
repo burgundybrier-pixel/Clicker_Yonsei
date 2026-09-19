@@ -40,7 +40,7 @@ const EMPTY_STATS: ClickStats = { supportClicks: 0, attackClicks: 0, totalClicks
  */
 export default function BattlePage() {
   const router = useRouter();
-  const { departments, setDepartments, resync, loading, error: loadError } = useRankingPolling(POLL_INTERVAL_MS);
+  const { departments, setDepartments, confirmedDepartments, setConfirmedDepartments, resync, loading, error: loadError } = useRankingPolling(POLL_INTERVAL_MS);
 
   const [myDepartmentId, setMyDepartmentId] = useState<number | null>(null);
   const [stats, setStats] = useState<ClickStats>(EMPTY_STATS);
@@ -48,11 +48,16 @@ export default function BattlePage() {
   const [overtake, setOvertake] = useState<OvertakeEvent | null>(null);
   const overtakeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const overtakeSequence = useRef(0);
+  const previousConfirmedRanking = useRef<{ departmentId: number; ranking: Department[] } | null>(null);
+  const [combo, setCombo] = useState(0);
+  const comboTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const comboLastClick = useRef(0);
 
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickAt = useRef<Map<string, number>>(new Map());
 
   useEffect(() => () => {
+    if (comboTimer.current) clearTimeout(comboTimer.current);
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     if (overtakeTimer.current) clearTimeout(overtakeTimer.current);
   }, []);
@@ -120,13 +125,6 @@ export default function BattlePage() {
       if (now - (lastClickAt.current.get(key) ?? 0) < CLICK_DEBOUNCE_MS) return;
       lastClickAt.current.set(key, now);
 
-      // Capture only opponents this click can overtake, before the optimistic update.
-      const mine = departments.find((d) => d.id === myDepartmentId);
-      const opponents = mine ? departments.filter((d) =>
-        d.id !== mine.id && d.score >= mine.score &&
-        (action === "support" ? department.id === mine.id : d.id === department.id)
-      ) : [];
-
       applyLocalDelta(department.id, action === "support" ? 1 : -1);
       setStats(action === "support" ? recordSupportClick() : recordAttackClick());
 
@@ -134,16 +132,7 @@ export default function BattlePage() {
         const updated =
           action === "support" ? await supportDepartment(department.id) : await attackDepartment(department.id);
         setDepartments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
-        const passed = opponents.filter((opponent) => {
-          const myScore = updated.id === mine?.id ? updated.score : mine?.score;
-          const theirScore = updated.id === opponent.id ? updated.score : opponent.score;
-          return myScore != null && myScore > theirScore;
-        });
-        if (passed.length > 0) {
-          setOvertake({ id: ++overtakeSequence.current, names: passed.map((d) => d.name) });
-          if (overtakeTimer.current) clearTimeout(overtakeTimer.current);
-          overtakeTimer.current = setTimeout(() => setOvertake(null), 3000);
-        }
+        setConfirmedDepartments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
       } catch (err) {
         setStats(action === "support" ? revertSupportClick() : revertAttackClick());
         await resync();
@@ -153,8 +142,37 @@ export default function BattlePage() {
         showNotice(err instanceof Error ? err.message : "요청이 실패했습니다. 잠시 후 다시 시도해 주세요.");
       }
     },
-    [applyLocalDelta, departments, myDepartmentId, resync, setDepartments, showNotice]
+    [applyLocalDelta, resync, setDepartments, setConfirmedDepartments, showNotice]
   );
+
+  // First server snapshot establishes the baseline; optimistic updates never celebrate.
+  useEffect(() => {
+    if (myDepartmentId == null || confirmedDepartments.length === 0) return;
+    const next = [...confirmedDepartments].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ko"));
+    const previous = previousConfirmedRanking.current;
+    previousConfirmedRanking.current = { departmentId: myDepartmentId, ranking: next };
+    if (!previous || previous.departmentId !== myDepartmentId) return;
+    // A roster change is a new baseline, not an overtake.
+    if (previous.ranking.length !== next.length || previous.ranking.some((d) => !next.some((item) => item.id === d.id))) return;
+    const oldIndex = previous.ranking.findIndex((d) => d.id === myDepartmentId);
+    const newIndex = next.findIndex((d) => d.id === myDepartmentId);
+    if (newIndex < 0 || oldIndex <= newIndex) return;
+    const passed = previous.ranking.slice(0, oldIndex).filter((d) => next.findIndex((item) => item.id === d.id) > newIndex);
+    if (passed.length === 0) return;
+    setOvertake({ id: ++overtakeSequence.current, names: passed.map((d) => d.name), departmentName: next[newIndex].name });
+    if (overtakeTimer.current) clearTimeout(overtakeTimer.current);
+    overtakeTimer.current = setTimeout(() => setOvertake(null), NOTICE_MS);
+  }, [confirmedDepartments, myDepartmentId]);
+
+  const handleClick = (action: ClickAction, department: Department) => {
+    const now = Date.now();
+    const continued = now - comboLastClick.current < 1500;
+    comboLastClick.current = now;
+    setCombo((prev) => continued ? prev + 1 : 1);
+    if (comboTimer.current) clearTimeout(comboTimer.current);
+    comboTimer.current = setTimeout(() => setCombo(0), 1500);
+    void sendClick(action, department);
+  };
 
   // ── 렌더링 ──────────────────────────────────────────────────────────────
 
@@ -190,7 +208,8 @@ export default function BattlePage() {
           department={myDepartment}
           rank={myRank}
           totalDepartments={ranking.length}
-          onSupport={() => sendClick("support", myDepartment)}
+          onSupport={() => handleClick("support", myDepartment)}
+          pointsToOvertake={myRank > 1 ? Math.max(1, ranking[myRank - 2].score - myDepartment.score + 1) : undefined}
         />
 
         <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
@@ -206,16 +225,19 @@ export default function BattlePage() {
           ))}
         </dl>
 
-        <h2 className="mt-6 text-sm font-semibold text-slate-300">전체 랭킹</h2>
+        <div className="mt-6 flex min-h-6 items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-slate-300">전체 랭킹</h2>
+          {combo >= 5 && <span className="text-sm font-extrabold tabular-nums text-brand-300" aria-hidden="true">{combo} COMBO</span>}
+        </div>
         <div className="mt-2">
           <RankingList
             departments={ranking}
             myDepartmentId={myDepartment.id}
             renderAction={(department) =>
               department.id === myDepartment.id ? (
-                <SupportButton onClick={() => sendClick("support", department)} label="+1" />
+                <SupportButton onClick={() => handleClick("support", department)} label="+1" />
               ) : (
-                <AttackButton onClick={() => sendClick("attack", department)} label="-1" />
+                <AttackButton onClick={() => handleClick("attack", department)} label="-1" />
               )
             }
           />
