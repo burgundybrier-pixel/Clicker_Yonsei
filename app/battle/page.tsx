@@ -7,6 +7,7 @@ import MyDepartmentCard from "@/components/MyDepartmentCard";
 import RankingList from "@/components/RankingList";
 import SupportButton from "@/components/SupportButton";
 import AttackButton from "@/components/AttackButton";
+import OvertakeCelebration, { type OvertakeEvent } from "@/components/OvertakeCelebration";
 import { supportDepartment, attackDepartment, ScoreRequestError } from "@/lib/scores";
 import { useRankingPolling } from "@/lib/hooks/useRankingPolling";
 import {
@@ -44,9 +45,17 @@ export default function BattlePage() {
   const [myDepartmentId, setMyDepartmentId] = useState<number | null>(null);
   const [stats, setStats] = useState<ClickStats>(EMPTY_STATS);
   const [notice, setNotice] = useState<string | null>(null);
+  const [overtake, setOvertake] = useState<OvertakeEvent | null>(null);
+  const overtakeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overtakeSequence = useRef(0);
 
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickAt = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => () => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    if (overtakeTimer.current) clearTimeout(overtakeTimer.current);
+  }, []);
 
   // 1) 첫 진입: localStorage 에서 내 학과와 클릭 기록을 읽는다. 학과가 없으면 선택 화면으로 보낸다.
   useEffect(() => {
@@ -111,6 +120,13 @@ export default function BattlePage() {
       if (now - (lastClickAt.current.get(key) ?? 0) < CLICK_DEBOUNCE_MS) return;
       lastClickAt.current.set(key, now);
 
+      // Capture only opponents this click can overtake, before the optimistic update.
+      const mine = departments.find((d) => d.id === myDepartmentId);
+      const opponents = mine ? departments.filter((d) =>
+        d.id !== mine.id && d.score >= mine.score &&
+        (action === "support" ? department.id === mine.id : d.id === department.id)
+      ) : [];
+
       applyLocalDelta(department.id, action === "support" ? 1 : -1);
       setStats(action === "support" ? recordSupportClick() : recordAttackClick());
 
@@ -118,6 +134,16 @@ export default function BattlePage() {
         const updated =
           action === "support" ? await supportDepartment(department.id) : await attackDepartment(department.id);
         setDepartments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+        const passed = opponents.filter((opponent) => {
+          const myScore = updated.id === mine?.id ? updated.score : mine?.score;
+          const theirScore = updated.id === opponent.id ? updated.score : opponent.score;
+          return myScore != null && myScore > theirScore;
+        });
+        if (passed.length > 0) {
+          setOvertake({ id: ++overtakeSequence.current, names: passed.map((d) => d.name) });
+          if (overtakeTimer.current) clearTimeout(overtakeTimer.current);
+          overtakeTimer.current = setTimeout(() => setOvertake(null), 3000);
+        }
       } catch (err) {
         setStats(action === "support" ? revertSupportClick() : revertAttackClick());
         await resync();
@@ -127,7 +153,7 @@ export default function BattlePage() {
         showNotice(err instanceof Error ? err.message : "요청이 실패했습니다. 잠시 후 다시 시도해 주세요.");
       }
     },
-    [applyLocalDelta, resync, setDepartments, showNotice]
+    [applyLocalDelta, departments, myDepartmentId, resync, setDepartments, showNotice]
   );
 
   // ── 렌더링 ──────────────────────────────────────────────────────────────
@@ -196,6 +222,7 @@ export default function BattlePage() {
         </div>
       </main>
 
+      <OvertakeCelebration event={overtake} />
       {notice && (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 flex justify-center px-4" role="status">
           <div className="rounded-full bg-slate-800/95 px-4 py-2 text-xs font-medium text-white shadow-lg">

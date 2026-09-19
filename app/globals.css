@@ -10,3 +10,64 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic",
     sans-serif;
 }
+
+.overtake-layer {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.overtake-celebration {
+  position: relative;
+  width: min(100%, 360px);
+  animation: overtake-appear 3s ease-out both;
+}
+
+.overtake-message {
+  position: relative;
+  padding: 24px 20px;
+  border: 1px solid rgb(251 146 60 / 70%);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgb(124 45 18 / 96%), rgb(15 23 42 / 97%));
+  box-shadow: 0 0 50px rgb(249 115 22 / 40%), inset 0 0 30px rgb(249 115 22 / 15%);
+  text-align: center;
+}
+
+.overtake-flames {
+  position: absolute;
+  inset: 0;
+}
+
+.overtake-flame {
+  position: absolute;
+  left: var(--x);
+  bottom: 0;
+  width: 24px;
+  height: var(--height);
+  border-radius: 70% 20% 60% 40%;
+  background: linear-gradient(to top, #ef4444, #f97316 40%, #fde68a 85%, transparent);
+  box-shadow: 0 0 18px rgb(251 146 60 / 60%);
+  transform-origin: bottom;
+  animation: overtake-fire 1s var(--delay) ease-out 3 both;
+}
+
+@keyframes overtake-fire {
+  0% { opacity: 0; transform: translateY(10px) scale(.5) rotate(-12deg); }
+  25% { opacity: .95; }
+  100% { opacity: 0; transform: translate(var(--drift), -190px) scale(.2) rotate(20deg); }
+}
+
+@keyframes overtake-appear {
+  0% { opacity: 0; transform: translateY(18px) scale(.85); }
+  12%, 85% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-16px) scale(1.03); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overtake-celebration { animation: none; }
+  .overtake-flame { animation: none; display: none; }
+}
